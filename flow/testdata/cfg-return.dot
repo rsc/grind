@@ -1,0 +1,16 @@
+digraph cfg {
+n6 [label="_cfg_end_ *ast.Ident :0"];
+n5 [label="r3 *ast.Ident testdata/cfg-return.go:5"];
+n5 -> n6 [label=""];
+n4 [label="r2 *ast.Ident testdata/cfg-return.go:5"];
+n4 -> n5 [label=""];
+n3 [label="r1 *ast.Ident testdata/cfg-return.go:5"];
+n3 -> n4 [label=""];
+n7 [label="g *ast.Ident testdata/cfg-return.go:7"];
+n7 -> n6 [label=""];
+n2 [label="ret *ast.Ident testdata/cfg-return.go:4"];
+n2 -> n3 [label=""];
+n2 -> n7 [label=""];
+n1 [label="_cfg_start_ *ast.Ident :0"];
+n1 -> n2 [label=""];
+}

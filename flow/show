@@ -1,0 +1,2 @@
+#!/bin/bash
+dot -Tsvg $1 >x.svg && open x.svg

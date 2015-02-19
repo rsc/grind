@@ -1,0 +1,9 @@
+digraph cfg {
+n4 [label="_cfg_end_ *ast.Ident :0"];
+n3 [label="h *ast.Ident testdata/cfg-triv.go:5"];
+n3 -> n4 [label=""];
+n2 [label="g *ast.Ident testdata/cfg-triv.go:4"];
+n2 -> n3 [label=""];
+n1 [label="_cfg_start_ *ast.Ident :0"];
+n1 -> n2 [label=""];
+}
