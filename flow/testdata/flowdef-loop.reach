@@ -1,0 +1,21 @@
+_cfg_start_ *ast.Ident :0:
+*ast.DeclStmt testdata/flowdef-loop.go:4:
+*ast.IncDecStmt testdata/flowdef-loop.go:5: *ast.DeclStmt testdata/flowdef-loop.go:4
+i *ast.Ident testdata/flowdef-loop.go:5: *ast.IncDecStmt testdata/flowdef-loop.go:5
+*ast.AssignStmt testdata/flowdef-loop.go:7: *ast.IncDecStmt testdata/flowdef-loop.go:5
+i *ast.Ident testdata/flowdef-loop.go:7: *ast.AssignStmt testdata/flowdef-loop.go:7
+i *ast.Ident testdata/flowdef-loop.go:7: *ast.AssignStmt testdata/flowdef-loop.go:7 *ast.IncDecStmt testdata/flowdef-loop.go:7
+use *ast.Ident testdata/flowdef-loop.go:8: *ast.AssignStmt testdata/flowdef-loop.go:7 *ast.IncDecStmt testdata/flowdef-loop.go:7
+*ast.AssignStmt testdata/flowdef-loop.go:11: *ast.AssignStmt testdata/flowdef-loop.go:7 *ast.IncDecStmt testdata/flowdef-loop.go:7
+i *ast.Ident testdata/flowdef-loop.go:8: *ast.AssignStmt testdata/flowdef-loop.go:7 *ast.IncDecStmt testdata/flowdef-loop.go:7
+i *ast.Ident testdata/flowdef-loop.go:11: *ast.AssignStmt testdata/flowdef-loop.go:11
+*ast.IncDecStmt testdata/flowdef-loop.go:7: *ast.AssignStmt testdata/flowdef-loop.go:7 *ast.IncDecStmt testdata/flowdef-loop.go:7
+i *ast.Ident testdata/flowdef-loop.go:11: *ast.AssignStmt testdata/flowdef-loop.go:11 *ast.IncDecStmt testdata/flowdef-loop.go:11
+i *ast.Ident testdata/flowdef-loop.go:7: *ast.IncDecStmt testdata/flowdef-loop.go:7
+use *ast.Ident testdata/flowdef-loop.go:12: *ast.AssignStmt testdata/flowdef-loop.go:11 *ast.IncDecStmt testdata/flowdef-loop.go:11
+use *ast.Ident testdata/flowdef-loop.go:15: *ast.AssignStmt testdata/flowdef-loop.go:11 *ast.IncDecStmt testdata/flowdef-loop.go:11
+i *ast.Ident testdata/flowdef-loop.go:12: *ast.AssignStmt testdata/flowdef-loop.go:11 *ast.IncDecStmt testdata/flowdef-loop.go:11
+i *ast.Ident testdata/flowdef-loop.go:15: *ast.AssignStmt testdata/flowdef-loop.go:11 *ast.IncDecStmt testdata/flowdef-loop.go:11
+*ast.IncDecStmt testdata/flowdef-loop.go:11: *ast.AssignStmt testdata/flowdef-loop.go:11 *ast.IncDecStmt testdata/flowdef-loop.go:11
+_cfg_end_ *ast.Ident :0: *ast.AssignStmt testdata/flowdef-loop.go:11 *ast.IncDecStmt testdata/flowdef-loop.go:11
+i *ast.Ident testdata/flowdef-loop.go:11: *ast.IncDecStmt testdata/flowdef-loop.go:11

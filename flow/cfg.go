@@ -90,7 +90,7 @@ func Build(fset *token.FileSet, body *ast.BlockStmt, interesting func(ast.Node) 
 		stmtLabel:    make(map[ast.Stmt]string),
 	}
 
-	b.scanGoto(body)
+	ast.Inspect(body, b.scanGoto)
 	b.followCache[start] = b.trimList(b.follow(body, []ast.Node{end}))
 	return &Graph{
 		FileSet: fset,
@@ -144,7 +144,7 @@ func mergef(l1, l2 []ast.Node) []ast.Node {
 	return out
 }
 
-func (b *builder) scanGoto(x ast.Node) {
+func (b *builder) scanGoto(x ast.Node) bool {
 	switch x := x.(type) {
 	case *ast.LabeledStmt:
 		b.gotoLabel[x.Label.Name] = x
@@ -153,10 +153,7 @@ func (b *builder) scanGoto(x ast.Node) {
 			b.isGotoTarget[x.Label.Name] = true
 		}
 	}
-
-	for _, y := range astSplit(x) {
-		b.scanGoto(y)
-	}
+	return true // scan children
 }
 
 func (b *builder) followCond(cond ast.Expr, btrue, bfalse []ast.Node) []ast.Node {
@@ -189,6 +186,37 @@ func (b *builder) addNode(x ast.Node, out []ast.Node) []ast.Node {
 	}
 	b.need[x] = true
 	return []ast.Node{x}
+}
+
+func astVisit(x ast.Node, f visitFunc) {
+	ast.Walk(f, x)
+}
+
+type visitFunc func(ast.Node) visitFunc
+
+func (f visitFunc) Visit(x ast.Node) ast.Visitor {
+	v := f(x)
+	if v == nil {
+		return nil
+	}
+	return v
+}
+
+func astVisitChildren(x ast.Node, f func(ast.Node)) {
+	astVisit(x, func(ast.Node) visitFunc {
+		return func(x ast.Node) visitFunc {
+			f(x)
+			return nil
+		}
+	})
+}
+
+func astSplit(x ast.Node) []ast.Node {
+	var list []ast.Node
+	astVisitChildren(x, func(x ast.Node) {
+		list = append(list, x)
+	})
+	return list
 }
 
 func (b *builder) previsit(x ast.Node, out []ast.Node) []ast.Node {
@@ -235,6 +263,26 @@ func (b *builder) follow(x ast.Node, out []ast.Node) []ast.Node {
 	}
 
 	switch x := x.(type) {
+	case *ast.AssignStmt:
+		var assigned []ast.Expr
+		var eval []ast.Expr
+		for _, y := range x.Lhs {
+			for {
+				yy, ok := y.(*ast.ParenExpr)
+				if !ok {
+					break
+				}
+				y = yy.X
+			}
+			id, ok := y.(*ast.Ident)
+			if ok {
+				assigned = append(assigned, id)
+			} else {
+				eval = append(eval, y)
+			}
+		}
+		return b.followExprs(eval, b.followExprs(x.Rhs, b.addNode(x, b.followExprs(assigned, out))))
+
 	case *ast.BranchStmt:
 		switch x.Tok {
 		case token.BREAK:
@@ -434,14 +482,17 @@ func (g *Graph) Dataflow(compute Computation) {
 		return
 	}
 
+	visited := make(map[ast.Node]bool)
 	compute.Init(g.Start)
 	var workq, nextq []ast.Node
 	workq = append(workq, g.Start)
-	for {
+	visited[g.Start] = true
+	for len(workq) > 0 {
 		for _, x := range workq {
 			compute.Transfer(x)
 			for _, y := range g.Follow[x] {
-				if compute.Join(x, y) {
+				if compute.Join(y, x) || !visited[y] {
+					visited[y] = true
 					nextq = append(nextq, y)
 				}
 			}
@@ -473,6 +524,18 @@ var escaper = strings.NewReplacer(
 	`"`, `\"`,
 )
 
+func nodeLabel(fset *token.FileSet, x ast.Node) string {
+	pos := fset.Position(x.Pos())
+	label := fmt.Sprintf("%T %s:%d", x, pos.Filename, pos.Line)
+	switch x := x.(type) {
+	case *ast.Ident:
+		label = x.Name + " " + label
+	case *ast.SelectorExpr:
+		label = "." + x.Sel.Name + " " + label
+	}
+	return label
+}
+
 func (p *printer) print(x ast.Node) {
 	if x == nil || p.visited[x] {
 		return
@@ -483,14 +546,7 @@ func (p *printer) print(x ast.Node) {
 		p.print(y)
 	}
 
-	pos := p.g.FileSet.Position(x.Pos())
-	label := fmt.Sprintf("%T %s:%d", x, pos.Filename, pos.Line)
-	switch x := x.(type) {
-	case *ast.Ident:
-		label = x.Name + " " + label
-	case *ast.SelectorExpr:
-		label = "." + x.Sel.Name + " " + label
-	}
+	label := nodeLabel(p.g.FileSet, x)
 
 	fmt.Fprintf(&p.buf, "%s [label=\"%s\"];\n", name, escaper.Replace(label))
 	for _, y := range p.g.Follow[x] {
