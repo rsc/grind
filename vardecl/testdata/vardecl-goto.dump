@@ -1,0 +1,12 @@
+var i
+	depth 2 (*ast.BlockStmt): testdata/vardecl-goto.go:8,13
+		init: testdata/vardecl-goto.go:5 *ast.DeclStmt
+var i
+	depth 2 (*ast.BlockStmt): testdata/vardecl-goto.go:18,24
+		init: testdata/vardecl-goto.go:16 *ast.DeclStmt
+var i
+	depth 2 (*ast.BlockStmt): testdata/vardecl-goto.go:31,34
+		init: testdata/vardecl-goto.go:28 *ast.DeclStmt
+var i
+	depth 3 (*ast.BlockStmt): testdata/vardecl-goto.go:44,45
+		init: testdata/vardecl-goto.go:44 *ast.AssignStmt

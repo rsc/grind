@@ -1,0 +1,8 @@
+var i
+	depth 2 (*ast.ForStmt): testdata/vardecl-loop.go:6,7
+		init: testdata/vardecl-loop.go:6 *ast.AssignStmt
+	depth 2 (*ast.ForStmt): testdata/vardecl-loop.go:10,11
+		init: testdata/vardecl-loop.go:10 *ast.AssignStmt
+var j
+	depth 1 (*ast.BlockStmt): testdata/vardecl-loop.go:15,15
+		init: testdata/vardecl-loop.go:14 *ast.DeclStmt

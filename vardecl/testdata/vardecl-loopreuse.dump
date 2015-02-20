@@ -1,0 +1,3 @@
+var i
+	depth 2 (*ast.ForStmt): testdata/vardecl-loopreuse.go:6,9
+		init: testdata/vardecl-loopreuse.go:6 *ast.ForStmt
