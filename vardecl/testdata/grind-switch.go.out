@@ -1,21 +1,20 @@
 package p
 
 func f() {
-	var i int
 	switch x {
 	case 1:
-		for i = 0; i < 10; i++ {
+		for i := 0; i < 10; i++ {
 			use(i)
 		}
 	case 2:
-		for i = 0; i < 10; i++ {
+		for i := 0; i < 10; i++ {
 			use(i)
 		}
 	}
 
-	var j int
 	switch x {
 	case 1:
+		var j int
 		for j = 0; j < 10; j++ {
 			_ = &j
 			use(j)
@@ -25,7 +24,7 @@ func f() {
 			use(j)
 		}
 	case 2:
-		for j = 0; j < 10; j++ {
+		for j := 0; j < 10; j++ {
 			use(j)
 		}
 	}
@@ -48,3 +47,7 @@ func f() {
 	}
 	use(k)
 }
+
+var x int
+
+func use(interface{})

@@ -1,0 +1,21 @@
+package p
+
+func f() {
+	{
+		var z int
+		switch z {
+		case 1:
+			var x int
+			use(&x)
+			use(x)
+			use(x)
+		case 2:
+			var x int
+			use(&x)
+			use(x)
+			use(x)
+		}
+	}
+}
+
+func use(interface{})

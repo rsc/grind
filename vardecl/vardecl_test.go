@@ -5,16 +5,13 @@
 package vardecl
 
 import (
-	"bytes"
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"io/ioutil"
-	"path/filepath"
-	"strings"
 	"testing"
+
+	"rsc.io/grind/grinder"
+	"rsc.io/grind/grindtest"
 )
 
+/*
 func TestVardeclGolden(t *testing.T) {
 	matches, err := filepath.Glob("testdata/vardecl-*.go")
 	if err != nil {
@@ -49,4 +46,9 @@ func TestVardeclGolden(t *testing.T) {
 			continue
 		}
 	}
+}
+*/
+
+func TestVardecl(t *testing.T) {
+	grindtest.TestGlob(t, "testdata/grind-*.go", []grinder.Func{Grind})
 }

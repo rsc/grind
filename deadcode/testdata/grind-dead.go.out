@@ -1,0 +1,19 @@
+package p
+
+var b bool
+
+func f(x int) {
+	if b {
+		if b {
+			return
+		}
+		if b {
+			goto Y
+		}
+		return
+	}
+	return
+
+Y:
+	f(3)
+}

@@ -9,20 +9,121 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"strings"
+
+	"golang.org/x/tools/go/types"
 
 	"rsc.io/grind/block"
 	"rsc.io/grind/flow"
+	"rsc.io/grind/grinder"
 )
 
-func Analyze(fset *token.FileSet, body *ast.BlockStmt) []*Var {
+func Grind(ctxt *grinder.Context, pkg *grinder.Package) {
+	grinder.GrindFuncDecls(ctxt, pkg, grindFunc)
+}
+
+func grindFunc(ctxt *grinder.Context, pkg *grinder.Package, edit *grinder.EditBuffer, fn *ast.FuncDecl) {
+	vars := analyzeFunc(pkg, fn.Body)
+	// fmt.Printf("%s", vardecl.PrintVars(conf.Fset, vars))
+	for _, v := range vars {
+		spec := v.Decl.Decl.(*ast.GenDecl).Specs[0].(*ast.ValueSpec)
+		if len(spec.Names) > 1 {
+			// TODO: Handle decls with multiple variables
+			continue
+		}
+		if pkg.FileSet.Position(v.Decl.Pos()).Line != pkg.FileSet.Position(v.Decl.End()).Line {
+			// Declaration spans line. Maybe not great to move or duplicate?
+			continue
+		}
+		keepDecl := false
+		for _, d := range v.Defs {
+			if d.Init == v.Decl {
+				keepDecl = true
+				continue
+			}
+			switch x := d.Init.(type) {
+			default:
+				panic("unexpected init")
+			case *ast.EmptyStmt:
+				edit.CopyLine(v.Decl.Pos(), v.Decl.End(), x.Semicolon)
+			case *ast.AssignStmt:
+				edit.Insert(x.TokPos, ":")
+				if !hasType(pkg, fn, x.Rhs[0], x.Lhs[0]) {
+					typ := edit.TextAt(spec.Type.Pos(), spec.Type.End())
+					if strings.Contains(typ, " ") || typ == "interface{}" || typ == "struct{}" || strings.HasPrefix(typ, "*") {
+						typ = "(" + typ + ")"
+					}
+					edit.Insert(x.Rhs[0].Pos(), typ+"(")
+					edit.Insert(x.Rhs[0].End(), ")")
+				}
+			}
+		}
+		if !keepDecl {
+			edit.DeleteLine(v.Decl.Pos(), v.Decl.End())
+		}
+	}
+}
+
+func hasType(pkg *grinder.Package, fn *ast.FuncDecl, x, v ast.Expr) bool {
+	// Does x (by itself) default to v's type?
+	// Find the scope in which x appears.
+	xScope := pkg.Info.Scopes[fn.Type]
+	ast.Inspect(fn.Body, func(z ast.Node) bool {
+		if z == nil {
+			return false
+		}
+		if x.Pos() < z.Pos() || z.End() <= x.Pos() {
+			return false
+		}
+		scope := pkg.Info.Scopes[z]
+		if scope != nil {
+			xScope = scope
+		}
+		return true
+	})
+	xt, err := types.EvalNode(pkg.FileSet, x, pkg.Types, xScope)
+	if err != nil {
+		return false
+	}
+	vt := pkg.Info.Types[v]
+	if types.Identical(xt.Type, vt.Type) {
+		return true
+	}
+
+	// Might be untyped.
+	vb, ok1 := vt.Type.(*types.Basic)
+	xb, ok2 := xt.Type.(*types.Basic)
+	if ok1 && ok2 {
+		switch xb.Kind() {
+		case types.UntypedInt:
+			return vb.Kind() == types.Int
+		case types.UntypedBool:
+			return vb.Kind() == types.Bool
+		case types.UntypedRune:
+			return vb.Kind() == types.Rune
+		case types.UntypedFloat:
+			return vb.Kind() == types.Float64
+		case types.UntypedComplex:
+			return vb.Kind() == types.Complex128
+		case types.UntypedString:
+			return vb.Kind() == types.String
+		}
+	}
+	return false
+}
+
+func analyzeFunc(pkg *grinder.Package, body *ast.BlockStmt) []*Var {
+	const debug = false
+
 	// Build list of candidate var declarations.
+	inClosure := make(map[*ast.Object]bool)
 	var objs []*ast.Object
 	vardecl := make(map[*ast.Object]*ast.DeclStmt)
 	ast.Inspect(body, func(x ast.Node) bool {
 		switch x := x.(type) {
 		case *ast.DeclStmt:
 			decl := x.Decl.(*ast.GenDecl)
-			if len(decl.Specs) != 1 {
+			if len(decl.Specs) != 1 || decl.Tok != token.VAR {
 				break
 			}
 			spec := decl.Specs[0].(*ast.ValueSpec)
@@ -35,30 +136,47 @@ func Analyze(fset *token.FileSet, body *ast.BlockStmt) []*Var {
 					vardecl[id.Obj] = x
 				}
 			}
+		case *ast.FuncLit:
+			ast.Inspect(x, func(x ast.Node) bool {
+				switch x := x.(type) {
+				case *ast.Ident:
+					if x.Obj != nil {
+						inClosure[x.Obj] = true
+					}
+				}
+				return true
+			})
+			return false
 		}
 		return true
 	})
 
 	// Compute block information for entire AST.
-	blocks := block.Build(fset, body)
+	blocks := block.Build(pkg.FileSet, body)
 
 	var vars []*Var
 	// Handle each variable separately.
 	for _, obj := range objs {
+		// For now, refuse to touch variables shared with closures.
+		// Could instead treat those variables as having their addresses
+		// taken at the point where the closure appears in the source code.
+		if inClosure[obj] {
+			continue
+		}
 		// Build flow graph of nodes relevant to v.
-		g := flow.Build(fset, body, func(x ast.Node) bool {
-			return needForObj(obj, x)
+		g := flow.Build(pkg.FileSet, body, func(x ast.Node) bool {
+			return needForObj(pkg, obj, x)
 		})
 
 		// Find reaching definitions.
-		m := newIdentMatcher(fset, g, obj)
+		m := newIdentMatcher(pkg, g, obj)
 		g.Dataflow(m)
 
 		// If an instance of v can refer to multiple definitions, merge them.
 		t := newUnionFind()
 		for _, x := range m.list {
-			if isDef(obj, x) {
-				t.Add(x)
+			for _, def := range m.out[x].list {
+				t.Add(def)
 			}
 		}
 		for _, x := range m.list {
@@ -80,6 +198,21 @@ func Analyze(fset *token.FileSet, body *ast.BlockStmt) []*Var {
 			nodedef[x] = d
 		}
 
+		// Build map from uses to candidate definitions.
+		idToDef := make(map[ast.Node]*Def)
+		for _, x := range m.list {
+			if _, ok := x.(*ast.Ident); ok {
+				if debug {
+					fmt.Printf("ID:IN %s\n", m.nodeIn(x))
+					fmt.Printf("ID:OUT %s\n", m.nodeOut(x))
+				}
+				defs := m.out[x].list
+				if len(defs) > 0 {
+					idToDef[x] = nodedef[t.Find(defs[0]).(ast.Node)]
+				}
+			}
+		}
+
 		// Compute start/end of where defn is needed,
 		// along with block where defn must be placed.
 		for _, x := range m.list {
@@ -95,15 +228,18 @@ func Analyze(fset *token.FileSet, body *ast.BlockStmt) []*Var {
 				// Only need to use list[0] because all x's possible defs
 				// have been merged in the previous passs.
 				d := nodedef[t.Find(m.out[x].list[0]).(ast.Node)]
+				bx := blocks.Map[x]
+				if debug {
+					fmt.Printf("ID:X %s d=%p %p b=%p %d\n", m.nodeIn(x), d, d.Block, bx, bx.Depth)
+				}
 				if d.Block == nil {
 					d.Block = blocks.Map[x]
 				} else {
 					// Hoist into block containing both preliminary d.Block and x.
-					bx := blocks.Map[x]
 					for bx.Depth > d.Block.Depth {
 						bx = bx.Parent
 					}
-					for d.Block.Depth < bx.Depth {
+					for d.Block.Depth > bx.Depth {
 						d.Start = d.Block.Root.Pos()
 						d.Block = d.Block.Parent
 					}
@@ -123,14 +259,17 @@ func Analyze(fset *token.FileSet, body *ast.BlockStmt) []*Var {
 		}
 
 		// Move tentative declaration sites up as required.
-		for _, d := range defs {
-			orig := blocks.Map[vardecl[obj]].Depth
-			if d.Block == nil {
-				continue
-			}
-			for {
-				changed := false
+		for {
+			changed := false
 
+			for di, d := range defs {
+				if d == nil {
+					continue
+				}
+				orig := blocks.Map[vardecl[obj]].Depth
+				if d.Block == nil {
+					continue
+				}
 				// Cannot move declarations into loops.
 				// Without liveness analysis we cannot be sure the variable is dead on entry.
 				for b := d.Block; b.Depth > orig; b = b.Parent {
@@ -152,20 +291,19 @@ func Analyze(fset *token.FileSet, body *ast.BlockStmt) []*Var {
 						// Cannot declare between backward goto (possibly in nested block)
 						// and target label in same or outer block; without liveness information,
 						// we can't be sure the variable is dead at the label.
-						if label.Pos() < d.Start && d.Start < g.Pos() {
+						if vardecl[obj].Pos() < label.Pos() && label.Pos() < d.Start && d.Start < g.Pos() {
 							for label.Pos() < d.Block.Root.Pos() {
 								d.Block = d.Block.Parent
-								changed = true
-								// TODO: Change d.End?
 							}
 							d.Start = label.Pos()
+							changed = true
 						}
 
 						// Cannot declare between forward goto (possibly in nested block)
 						// and target label in same block; Go disallows jumping over declaration.
-						if g.Pos() < d.Start && d.Start < label.Pos() && blocks.Map[label] == d.Block {
+						if g.Pos() < d.Start && d.Start <= label.Pos() && blocks.Map[label] == d.Block {
 							d.Start = g.Pos()
-							// TODO: Change d.End?
+							changed = true
 						}
 					}
 				}
@@ -188,34 +326,67 @@ func Analyze(fset *token.FileSet, body *ast.BlockStmt) []*Var {
 					changed = true
 				}
 
-				if !changed {
-					break
+				// From a purely flow control point of view, in something like:
+				//	var x int
+				//	{
+				//		x = 2
+				//		y = x+x
+				//		x = y
+				//	}
+				//	use(x)
+				// The declaration 'x = 2' could be turned into a :=, since that value
+				// is only used on the next line, except that the := will make the assignment
+				// on the next line no longer refer to the outer x.
+				// For each instance of x, if the proposed declaration shadows the
+				// actual target of that x, merge the proposal into the outer declaration.
+				for x, xDef := range idToDef {
+					if xDef != d && xDef.Block.Depth < d.Block.Depth && d.Start <= x.Pos() && x.Pos() < d.Block.Root.End() {
+						// xDef is an outer definition, so its start is already earlier than d's.
+						// No need to update xDef.Start.
+						// Not clear we care about xDef.End.
+						// Update idToDef mappings to redirect d to xDef.
+						for y, yDef := range idToDef {
+							if yDef == d {
+								idToDef[y] = xDef
+							}
+						}
+						defs[di] = nil
+						changed = true // because idToDef changed
+					}
 				}
+			}
+
+			if !changed {
+				break
 			}
 		}
 
 		// There can only be one definition (with a given name) per block.
 		// Merge as needed.
 		blockdef := make(map[*block.Block]*Def)
-		for _, d := range defs {
+		for di, d := range defs {
+			if d == nil {
+				continue
+			}
 			dd := blockdef[d.Block]
 			if dd == nil {
 				blockdef[d.Block] = d
 				continue
 			}
-			fmt.Printf("merge defs %p %p\n", d, dd)
+			//fmt.Printf("merge defs %p %p\n", d, dd)
 			if d.Start < dd.Start {
 				dd.Start = d.Start
 			}
 			if d.End > dd.End {
 				dd.End = d.End
 			}
+			defs[di] = nil
 		}
 
 		// Find place to put declaration.
 		// We established canDeclare(d.Block, obj) above.
 		for _, d := range defs {
-			if d.Block == nil || blockdef[d.Block] != d {
+			if d == nil || d.Block == nil {
 				continue
 			}
 			switch x := d.Block.Root.(type) {
@@ -232,51 +403,42 @@ func Analyze(fset *token.FileSet, body *ast.BlockStmt) []*Var {
 				d.Init = placeInit(d.Start, obj, vardecl[obj], x.Body)
 
 			case *ast.IfStmt:
-				if x.Init != nil {
-					d.Init = x.Init
-				} else {
-					d.Init = x
+				if x.Init == nil {
+					panic("if without init")
 				}
+				d.Init = x.Init
 
 			case *ast.ForStmt:
-				if x.Init != nil {
-					d.Init = x.Init
-				} else {
-					d.Init = x
+				if x.Init == nil {
+					panic("for without init")
 				}
+				d.Init = x.Init
 
 			case *ast.RangeStmt:
 				d.Init = x
 
 			case *ast.SwitchStmt:
-				if x.Init != nil {
-					d.Init = x.Init
-				} else {
-					d.Init = x
+				if x.Init == nil {
+					panic("switch without init")
 				}
+				d.Init = x
 
 			case *ast.TypeSwitchStmt:
-				if x.Init != nil {
-					d.Init = x.Init
-				} else {
-					d.Init = x
+				if x.Init == nil {
+					panic("type switch without init")
 				}
+				d.Init = x
 			}
 		}
 
-		// Add to output list.
-		v := &Var{Obj: obj}
-		vars = append(vars, v)
+		// Build report.
+		v := &Var{Obj: obj, Decl: vardecl[obj]}
 		for _, d := range defs {
-			if d.Block == nil {
-				// Declaration only.
+			if d == nil || d.Block == nil {
 				continue
 			}
-			if blockdef[d.Block] != d {
-				// Merged into a different Def.
-				continue
-			}
-			if false {
+			if debug {
+				fset := pkg.FileSet
 				fmt.Printf("\tdepth %d: %s:%d,%d\n", d.Block.Depth, fset.Position(d.Start).Filename, fset.Position(d.Start).Line, fset.Position(d.End).Line)
 				for _, x := range m.list {
 					if len(m.out[x].list) > 0 {
@@ -288,6 +450,13 @@ func Analyze(fset *token.FileSet, body *ast.BlockStmt) []*Var {
 			}
 			v.Defs = append(v.Defs, d)
 		}
+
+		if len(v.Defs) == 1 && v.Defs[0].Init == vardecl[obj] {
+			// No changes suggested.
+			continue
+		}
+
+		vars = append(vars, v)
 	}
 
 	return vars
@@ -316,15 +485,24 @@ func placeInit(start token.Pos, obj *ast.Object, decl *ast.DeclStmt, list []ast.
 		return decl
 	}
 
+	x := list[i]
+	for {
+		xx, ok := x.(*ast.LabeledStmt)
+		if !ok || xx.Stmt.Pos() > start {
+			break
+		}
+		x = xx.Stmt
+	}
+
 	return &ast.EmptyStmt{
-		Semicolon: list[i].Pos(),
+		Semicolon: x.Pos(),
 	}
 }
 
 func allSimple(list []ast.Stmt) bool {
 	for _, x := range list {
 		switch x.(type) {
-		case *ast.DeclStmt, *ast.AssignStmt, *ast.ExprStmt, *ast.EmptyStmt:
+		case *ast.DeclStmt, *ast.AssignStmt, *ast.ExprStmt, *ast.EmptyStmt, *ast.IncDecStmt:
 			// ok
 		default:
 			return false
@@ -339,32 +517,48 @@ func canDeclare(x ast.Node, obj *ast.Object) bool {
 		return true
 
 	case *ast.IfStmt:
-		if x.Init == nil || canDeclare(x.Init, obj) {
+		if canDeclare(x.Init, obj) {
 			return true
 		}
 
 	case *ast.SwitchStmt:
-		if x.Init == nil || canDeclare(x.Init, obj) {
+		if canDeclare(x.Init, obj) {
 			return true
 		}
 
 	case *ast.TypeSwitchStmt:
-		if x.Init == nil || canDeclare(x.Init, obj) {
+		if canDeclare(x.Init, obj) {
 			return true
 		}
 
 	case *ast.ForStmt:
-		if x.Init == nil || canDeclare(x.Init, obj) {
+		if canDeclare(x.Init, obj) {
 			return true
 		}
 
 	case *ast.RangeStmt:
+		return false
+		// TODO: Can enable this but only with type information.
+		// Need to make sure the obj type matches the range variable type.
+		// There's nowhere to insert a conversion if not.
 		if isIdentObj(x.Key, obj) && (x.Value == nil || isBlank(x.Value)) || isBlank(x.Key) && isIdentObj(x.Value, obj) {
 			return true
 		}
 
 	case *ast.AssignStmt: // for recursive calls
 		if len(x.Lhs) == 1 && x.Tok == token.ASSIGN && isIdentObj(x.Lhs[0], obj) {
+			onRhs := false
+			for _, y := range x.Rhs {
+				ast.Inspect(y, func(z ast.Node) bool {
+					if isIdentObj(z, obj) {
+						onRhs = true
+					}
+					return !onRhs
+				})
+			}
+			if onRhs {
+				return false
+			}
 			return true
 		}
 	}
@@ -385,7 +579,8 @@ func PrintVars(fset *token.FileSet, vars []*Var) []byte {
 	var buf bytes.Buffer
 
 	for _, v := range vars {
-		fmt.Fprintf(&buf, "var %s\n", v.Obj.Name)
+		pos := v.Decl.Pos()
+		fmt.Fprintf(&buf, "var %s %s:%d\n", v.Obj.Name, fset.Position(pos).Filename, fset.Position(pos).Line)
 		for _, d := range v.Defs {
 			fmt.Fprintf(&buf, "\tdepth %d (%T): %s:%d,%d\n", d.Block.Depth, d.Block.Root, fset.Position(d.Start).Filename, fset.Position(d.Start).Line, fset.Position(d.End).Line)
 			if d.Init != nil {
@@ -400,6 +595,7 @@ func PrintVars(fset *token.FileSet, vars []*Var) []byte {
 
 type Var struct {
 	Obj  *ast.Object
+	Decl *ast.DeclStmt
 	Defs []*Def
 }
 
@@ -442,18 +638,7 @@ func outsideLoop(x *block.Block) *block.Block {
 	return x
 }
 
-func isDef(obj *ast.Object, x ast.Node) bool {
-	if !needForObj(obj, x) {
-		return false
-	}
-	switch x.(type) {
-	case *ast.DeclStmt, *ast.AssignStmt, *ast.IncDecStmt:
-		return true
-	}
-	return false
-}
-
-func needForObj(obj *ast.Object, x ast.Node) bool {
+func needForObj(pkg *grinder.Package, obj *ast.Object, x ast.Node) (need bool) {
 	switch x := x.(type) {
 	case *ast.Ident:
 		if x.Obj == obj {
@@ -469,11 +654,37 @@ func needForObj(obj *ast.Object, x ast.Node) bool {
 					y = yy.X
 					continue
 				case *ast.SelectorExpr:
-					// TODO: Only if yy.X is a struct (not a struct pointer, not an interface value).
+					// If yy.X is a pointer, stop.
+					t := pkg.Info.Types[yy.X].Type
+					if t != nil {
+						t = t.Underlying()
+						if t == nil {
+							panic("underlying nil")
+						}
+						_, ok := t.(*types.Pointer)
+						if ok {
+							break
+						}
+					}
 					y = yy.X
 					continue
 				case *ast.IndexExpr:
-					// TODO: Only if yy.X is an array (not an array pointer, not a slice).
+					// If yy.X is a pointer or slice, stop.
+					t := pkg.Info.Types[yy.X].Type
+					if t != nil {
+						t = t.Underlying()
+						if t == nil {
+							panic("underlying nil")
+						}
+						_, ok := t.(*types.Pointer)
+						if ok {
+							break
+						}
+						_, ok = t.(*types.Slice)
+						if ok {
+							break
+						}
+					}
 					y = yy.X
 					continue
 				}
@@ -550,13 +761,15 @@ type identMatcher struct {
 	fset *token.FileSet
 	g    *flow.Graph
 	obj  *ast.Object
+	pkg  *grinder.Package
 }
 
-func newIdentMatcher(fset *token.FileSet, g *flow.Graph, obj *ast.Object) *identMatcher {
+func newIdentMatcher(pkg *grinder.Package, g *flow.Graph, obj *ast.Object) *identMatcher {
 	return &identMatcher{
 		in:   make(map[ast.Node]defSet),
 		out:  make(map[ast.Node]defSet),
-		fset: fset,
+		pkg:  pkg,
+		fset: pkg.FileSet,
 		g:    g,
 		obj:  obj,
 	}
@@ -587,7 +800,7 @@ func (m *identMatcher) Init(x ast.Node) {
 }
 
 func (m *identMatcher) Transfer(x ast.Node) {
-	if !needForObj(m.obj, x) {
+	if !needForObj(m.pkg, m.obj, x) {
 		m.out[x] = m.in[x]
 		return
 	}
@@ -598,6 +811,12 @@ func (m *identMatcher) Transfer(x ast.Node) {
 	}
 
 	switch x := x.(type) {
+	case *ast.Ident:
+		if len(m.in[x].list) == 1 && isDecl(m.in[x].list[0]) { // first use
+			m.out[x] = defSet{[]ast.Node{x}, false}
+			return
+		}
+
 	case *ast.DeclStmt:
 		m.out[x] = defSet{[]ast.Node{x}, false}
 		return
@@ -615,6 +834,11 @@ func (m *identMatcher) Transfer(x ast.Node) {
 		return
 	}
 	m.out[x] = m.in[x]
+}
+
+func isDecl(x ast.Node) bool {
+	_, ok := x.(*ast.DeclStmt)
+	return ok
 }
 
 func (m *identMatcher) Join(x, y ast.Node) bool {
@@ -675,6 +899,10 @@ func newUnionFind() *unionFind {
 }
 
 func (u *unionFind) Add(x interface{}) {
+	_, ok := u.parent[x]
+	if ok {
+		return
+	}
 	u.parent[x] = x
 	u.rank[x] = 0
 	u.all = append(u.all, x)
