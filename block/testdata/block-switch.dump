@@ -1,0 +1,10 @@
+0: depth=0 child=1
+1: depth=1 parent=0 child=2,4,7 root=*ast.BlockStmt testdata/block-switch.go:3
+2: depth=2 parent=1 child=3 root=*ast.ForStmt testdata/block-switch.go:4
+3: depth=3 parent=2 root=*ast.BlockStmt testdata/block-switch.go:4
+4: depth=2 parent=1 child=5,6 root=*ast.SwitchStmt testdata/block-switch.go:8
+5: depth=3 parent=4 root=*ast.CaseClause testdata/block-switch.go:9
+6: depth=3 parent=4 root=*ast.CaseClause testdata/block-switch.go:11
+7: depth=2 parent=1 child=8,9 root=*ast.TypeSwitchStmt testdata/block-switch.go:15
+8: depth=3 parent=7 root=*ast.CaseClause testdata/block-switch.go:16
+9: depth=3 parent=7 root=*ast.CaseClause testdata/block-switch.go:18

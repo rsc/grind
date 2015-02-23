@@ -251,13 +251,16 @@ func (b *builder) follow(x ast.Node, out []ast.Node) []ast.Node {
 	b.followed[x] = true
 
 	if x, ok := x.(ast.Expr); ok {
-		if x, ok := x.(*ast.BinaryExpr); ok {
+		switch x := x.(type) {
+		case *ast.BinaryExpr:
 			switch x.Op {
 			case token.LAND:
 				return b.followCond(x.X, b.follow(x.Y, out), out)
 			case token.LOR:
 				return b.followCond(x.X, out, b.follow(x.Y, out))
 			}
+		case *ast.FuncLit:
+			return b.addNode(x, out)
 		}
 		return b.postvisit(x, out)
 	}
@@ -333,7 +336,7 @@ func (b *builder) follow(x ast.Node, out []ast.Node) []ast.Node {
 		return b.follow(x.Init, b.addNode(x, b.follow(x.Cond, condOut)))
 
 	case *ast.IfStmt:
-		return b.followCond(x.Cond, b.follow(x.Body, out), b.follow(x.Else, out))
+		return b.follow(x.Init, b.followCond(x.Cond, b.follow(x.Body, out), b.follow(x.Else, out)))
 
 	case *ast.RangeStmt:
 		oldBrk := b.brk

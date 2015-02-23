@@ -1,0 +1,36 @@
+digraph cfg {
+n9 [label="_cfg_end_ *ast.Ident :0"];
+n8 [label="err *ast.Ident testdata/cfg-addr.go:6"];
+n8 -> n9 [label=""];
+n17 [label="*ast.AssignStmt testdata/cfg-addr.go:10"];
+n17 -> n9 [label=""];
+n16 [label="Base *ast.Ident testdata/cfg-addr.go:10"];
+n16 -> n17 [label=""];
+n15 [label="ss *ast.Ident testdata/cfg-addr.go:10"];
+n15 -> n16 [label=""];
+n14 [label="base *ast.Ident testdata/cfg-addr.go:10"];
+n14 -> n15 [label=""];
+n13 [label="s *ast.Ident testdata/cfg-addr.go:10"];
+n13 -> n14 [label=""];
+n12 [label="Lock *ast.Ident testdata/cfg-addr.go:9"];
+n12 -> n13 [label=""];
+n11 [label="mutex *ast.Ident testdata/cfg-addr.go:9"];
+n11 -> n12 [label=""];
+n10 [label="s *ast.Ident testdata/cfg-addr.go:9"];
+n10 -> n11 [label=""];
+n7 [label="nil *ast.Ident testdata/cfg-addr.go:5"];
+n7 -> n8 [label=""];
+n7 -> n10 [label=""];
+n6 [label="err *ast.Ident testdata/cfg-addr.go:5"];
+n6 -> n7 [label=""];
+n5 [label="err *ast.Ident testdata/cfg-addr.go:5"];
+n5 -> n6 [label=""];
+n4 [label="*ast.AssignStmt testdata/cfg-addr.go:5"];
+n4 -> n5 [label=""];
+n3 [label="ss *ast.Ident testdata/cfg-addr.go:5"];
+n3 -> n4 [label=""];
+n2 [label="decode *ast.Ident testdata/cfg-addr.go:5"];
+n2 -> n3 [label=""];
+n1 [label="_cfg_start_ *ast.Ident :0"];
+n1 -> n2 [label=""];
+}

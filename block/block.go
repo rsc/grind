@@ -33,12 +33,18 @@ type builder struct {
 }
 
 type builderVisitor struct {
-	builder *builder
-	current *Block
+	builder   *builder
+	current   *Block
+	skipBlock bool
 }
 
 func (v *builderVisitor) Visit(x ast.Node) ast.Visitor {
 	v.builder.g.Map[x] = v.current
+	if v.skipBlock {
+		if _, ok := x.(*ast.BlockStmt); ok {
+			return &builderVisitor{builder: v.builder, current: v.current}
+		}
+	}
 	switch x := x.(type) {
 	case *ast.BlockStmt, *ast.IfStmt, *ast.ForStmt, *ast.RangeStmt, *ast.SwitchStmt, *ast.TypeSwitchStmt, *ast.CaseClause, *ast.CommClause:
 		b := &Block{
@@ -49,7 +55,14 @@ func (v *builderVisitor) Visit(x ast.Node) ast.Visitor {
 		}
 		v.builder.nblock++
 		v.current.Child = append(v.current.Child, b)
-		return &builderVisitor{v.builder, b}
+		skipBlock := false
+		switch x.(type) {
+		case *ast.SwitchStmt, *ast.TypeSwitchStmt:
+			// The braces in the inner BlockStmt do NOT mark a new scope
+			// where variables can be declared. Elide.
+			skipBlock = true
+		}
+		return &builderVisitor{builder: v.builder, current: b, skipBlock: skipBlock}
 	case *ast.LabeledStmt:
 		v.builder.g.Label[x.Label.Name] = x
 	case *ast.BranchStmt:

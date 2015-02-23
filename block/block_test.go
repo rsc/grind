@@ -45,7 +45,7 @@ func TestBlockGolden(t *testing.T) {
 		golden, _ := ioutil.ReadFile(base + ".dump")
 		if !bytes.Equal(dump, golden) {
 			ioutil.WriteFile(base+".dump.xxx", dump, 0666)
-			t.Errorf("%s: wrong graph; have %s.dump.xxx, want %s.dot", file, base, base)
+			t.Errorf("%s: wrong graph; have %s.dump.xxx, want %s.dump", file, base, base)
 			continue
 		}
 	}

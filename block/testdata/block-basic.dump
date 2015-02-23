@@ -1,0 +1,6 @@
+0: depth=0 child=1
+1: depth=1 parent=0 child=2 root=*ast.BlockStmt testdata/block-basic.go:3
+2: depth=2 parent=1 child=3,4 root=*ast.IfStmt testdata/block-basic.go:4
+3: depth=3 parent=2 root=*ast.BlockStmt testdata/block-basic.go:4
+4: depth=3 parent=2 child=5 root=*ast.BlockStmt testdata/block-basic.go:6
+5: depth=4 parent=4 root=*ast.BlockStmt testdata/block-basic.go:7
