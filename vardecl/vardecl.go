@@ -243,7 +243,7 @@ func analyzeFunc(pkg *grinder.Package, body *ast.BlockStmt) []*Var {
 						d.Start = d.Block.Root.Pos()
 						d.Block = d.Block.Parent
 					}
-					if d.Block != bx {
+					for d.Block != bx {
 						d.Start = d.Block.Root.Pos()
 						d.Block = d.Block.Parent
 						bx = bx.Parent

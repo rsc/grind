@@ -42,7 +42,6 @@ func f() {
 	}
 	{
 		{
-
 			if b {
 				goto L4
 			}

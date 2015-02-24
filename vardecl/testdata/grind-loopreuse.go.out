@@ -1,7 +1,6 @@
 package p
 
 func f() {
-
 	{
 		var i int
 		for {

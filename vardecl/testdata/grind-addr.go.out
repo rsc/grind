@@ -9,7 +9,6 @@ type T struct {
 
 func f() {
 	{
-
 		{
 			i := 10
 			use(i)
