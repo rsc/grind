@@ -8,6 +8,8 @@ import (
 	"go/ast"
 	"go/token"
 
+	"golang.org/x/tools/go/types"
+
 	"rsc.io/grind/block"
 )
 
@@ -144,4 +146,29 @@ func hasBreak(x ast.Stmt) bool {
 		return !found
 	})
 	return found
+}
+
+func (pkg *Package) LookupAtPos(fn *ast.FuncDecl, pos token.Pos, name string) types.Object {
+	scope := pkg.Info.Scopes[fn.Type]
+	ast.Inspect(fn.Body, func(x ast.Node) bool {
+		if x == nil {
+			return false
+		}
+		if pos < x.Pos() || x.End() <= pos {
+			return false
+		}
+		s := pkg.Info.Scopes[x]
+		if s != nil {
+			scope = s
+		}
+		return true
+	})
+
+	for ; scope != nil; scope = scope.Parent() {
+		obj := scope.Lookup(name)
+		if obj != nil && obj.Pos() < pos {
+			return obj
+		}
+	}
+	return nil
 }

@@ -27,6 +27,7 @@ type Package struct {
 	Filenames  []string
 	FileSet    *token.FileSet
 	Types      *types.Package
+	TypesError error
 	Info       types.Info
 
 	clean  bool
@@ -157,6 +158,8 @@ Loop:
 		pkg.Info = types.Info{}
 		pkg.Info.Types = make(map[ast.Expr]types.TypeAndValue)
 		pkg.Info.Scopes = make(map[ast.Node]*types.Scope)
+		pkg.Info.Defs = make(map[*ast.Ident]types.Object)
+		pkg.Info.Uses = make(map[*ast.Ident]types.Object)
 		typesPkg, err := conf.Check(pkg.ImportPath, pkg.FileSet, pkg.Files, &pkg.Info)
 		if err != nil && typesPkg == nil {
 			if loop > 0 {
@@ -172,6 +175,7 @@ Loop:
 			return
 		}
 		pkg.Types = typesPkg
+		pkg.TypesError = err
 
 		for _, g := range ctxt.Grinders {
 			pkg.clean = true
