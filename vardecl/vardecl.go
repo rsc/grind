@@ -23,7 +23,7 @@ func Grind(ctxt *grinder.Context, pkg *grinder.Package) {
 }
 
 func grindFunc(ctxt *grinder.Context, pkg *grinder.Package, edit *grinder.EditBuffer, fn *ast.FuncDecl) {
-	vars := analyzeFunc(pkg, fn.Body)
+	vars := analyzeFunc(pkg, edit, fn.Body)
 	// fmt.Printf("%s", vardecl.PrintVars(conf.Fset, vars))
 	for _, v := range vars {
 		spec := v.Decl.Decl.(*ast.GenDecl).Specs[0].(*ast.ValueSpec)
@@ -112,7 +112,7 @@ func hasType(pkg *grinder.Package, fn *ast.FuncDecl, x, v ast.Expr) bool {
 	return false
 }
 
-func analyzeFunc(pkg *grinder.Package, body *ast.BlockStmt) []*Var {
+func analyzeFunc(pkg *grinder.Package, edit *grinder.EditBuffer, body *ast.BlockStmt) []*Var {
 	const debug = false
 
 	// Build list of candidate var declarations.
@@ -394,13 +394,13 @@ func analyzeFunc(pkg *grinder.Package, body *ast.BlockStmt) []*Var {
 				panic(fmt.Sprintf("unexpected declaration block root %T", d.Block.Root))
 
 			case *ast.BlockStmt:
-				d.Init = placeInit(d.Start, obj, vardecl[obj], x.List)
+				d.Init = placeInit(edit, d.Start, obj, vardecl[obj], x.List)
 
 			case *ast.CaseClause:
-				d.Init = placeInit(d.Start, obj, vardecl[obj], x.Body)
+				d.Init = placeInit(edit, d.Start, obj, vardecl[obj], x.Body)
 
 			case *ast.CommClause:
-				d.Init = placeInit(d.Start, obj, vardecl[obj], x.Body)
+				d.Init = placeInit(edit, d.Start, obj, vardecl[obj], x.Body)
 
 			case *ast.IfStmt:
 				if x.Init == nil {
@@ -472,10 +472,10 @@ func unlabel(x ast.Stmt) ast.Stmt {
 	}
 }
 
-func placeInit(start token.Pos, obj *ast.Object, decl *ast.DeclStmt, list []ast.Stmt) ast.Node {
+func placeInit(edit *grinder.EditBuffer, start token.Pos, obj *ast.Object, decl *ast.DeclStmt, list []ast.Stmt) ast.Node {
 	declPos := -1
 	i := 0
-	for i < len(list) && list[i].End() < start {
+	for i < len(list) && edit.End(list[i]) < start {
 		if unlabel(list[i]) == decl {
 			declPos = i
 		}

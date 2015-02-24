@@ -57,6 +57,7 @@ func (p *Package) Rewrite(name, content string) {
 	}
 	// Cut blank lines at top of blocks declarations.
 	gofmt = bytes.Replace(gofmt, []byte("{\n\n"), []byte("{\n"), -1)
+	gofmt = bytes.Replace(gofmt, []byte("\n\n}"), []byte("\n}"), -1)
 	p.newSrc[name] = string(gofmt)
 	p.clean = false
 }

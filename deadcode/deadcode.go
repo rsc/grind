@@ -35,13 +35,13 @@ func grindFunc(ctxt *grinder.Context, pkg *grinder.Package, edit *grinder.EditBu
 
 		for i := 0; i < len(list); i++ {
 			x := list[i]
-			if !fallsThrough(x) {
+			if grinder.IsTerminatingStmt(blocks, x) {
 				end := i + 1
 				for end < len(list) && !isGotoTarget(blocks, list[end]) {
 					end++
 				}
 				if end > i+1 {
-					edit.Delete(x.End(), list[end-1].End())
+					edit.Delete(edit.End(x), edit.End(list[end-1]))
 					i = end - 1 // after i++, next iteration starts at end
 				}
 			}

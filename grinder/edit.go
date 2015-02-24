@@ -52,12 +52,37 @@ type edit struct {
 	text  string
 }
 
+// End returns x.End() except that it works around buggy results from
+// the implementation of *ast.LabeledStmt and *ast.EmptyStmt.
+// The node x must be located within b's source file.
+// See golang.org/issue/9979.
+func (b *EditBuffer) End(x ast.Node) token.Pos {
+	switch x := x.(type) {
+	case *ast.LabeledStmt:
+		if _, ok := x.Stmt.(*ast.EmptyStmt); ok {
+			return x.Colon + 1
+		}
+		return b.End(x.Stmt)
+	case *ast.EmptyStmt:
+		i := b.tx(x.Semicolon)
+		if strings.HasPrefix(b.text[i:], ";") {
+			return x.Semicolon + 1
+		}
+		return x.Semicolon
+	}
+	return x.End()
+}
+
 func (b *EditBuffer) TextAt(start, end token.Pos) string {
 	return string(b.text[b.tx(start):b.tx(end)])
 }
 
 func (b *EditBuffer) Insert(p token.Pos, text string) {
 	b.edits = append(b.edits, edit{b.tx(p), b.tx(p), text})
+}
+
+func (b *EditBuffer) Replace(start, end token.Pos, text string) {
+	b.edits = append(b.edits, edit{b.tx(start), b.tx(end), text})
 }
 
 func (b *EditBuffer) Delete(startp, endp token.Pos) {
@@ -132,6 +157,9 @@ func (b *EditBuffer) Apply() string {
 	for _, e := range b.edits {
 		//fmt.Printf("EDIT: %+v\n", e)
 		if e.start < last {
+			for _, e := range b.edits {
+				fmt.Printf("%d,%d %q\n", e.start, e.end, e.text)
+			}
 			panic("overlapping edits")
 		}
 		out = append(out, b.text[last:e.start]...)

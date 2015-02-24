@@ -1,0 +1,12 @@
+package p
+
+func f() {
+}
+
+func f1() {
+	if b {
+		println()
+	}
+}
+
+var b bool

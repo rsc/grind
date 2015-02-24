@@ -12,11 +12,13 @@ import (
 )
 
 type Graph struct {
-	Start   *Block
-	Map     map[ast.Node]*Block
-	Label   map[string]*ast.LabeledStmt
-	Goto    map[string][]*ast.BranchStmt
-	FileSet *token.FileSet
+	Start    *Block
+	Map      map[ast.Node]*Block
+	Label    map[string]*ast.LabeledStmt
+	Goto     map[string][]*ast.BranchStmt
+	Break    map[string][]*ast.BranchStmt
+	Continue map[string][]*ast.BranchStmt
+	FileSet  *token.FileSet
 }
 
 type Block struct {
@@ -66,8 +68,16 @@ func (v *builderVisitor) Visit(x ast.Node) ast.Visitor {
 	case *ast.LabeledStmt:
 		v.builder.g.Label[x.Label.Name] = x
 	case *ast.BranchStmt:
-		if x.Tok == token.GOTO {
+		if x.Label == nil {
+			break
+		}
+		switch x.Tok {
+		case token.GOTO:
 			v.builder.g.Goto[x.Label.Name] = append(v.builder.g.Goto[x.Label.Name], x)
+		case token.BREAK:
+			v.builder.g.Break[x.Label.Name] = append(v.builder.g.Break[x.Label.Name], x)
+		case token.CONTINUE:
+			v.builder.g.Continue[x.Label.Name] = append(v.builder.g.Continue[x.Label.Name], x)
 		}
 	}
 	return v
@@ -75,11 +85,13 @@ func (v *builderVisitor) Visit(x ast.Node) ast.Visitor {
 
 func Build(fset *token.FileSet, x ast.Node) *Graph {
 	g := &Graph{
-		Start:   &Block{},
-		Map:     make(map[ast.Node]*Block),
-		Label:   make(map[string]*ast.LabeledStmt),
-		Goto:    make(map[string][]*ast.BranchStmt),
-		FileSet: fset,
+		Start:    &Block{},
+		Map:      make(map[ast.Node]*Block),
+		Label:    make(map[string]*ast.LabeledStmt),
+		Goto:     make(map[string][]*ast.BranchStmt),
+		Break:    make(map[string][]*ast.BranchStmt),
+		Continue: make(map[string][]*ast.BranchStmt),
+		FileSet:  fset,
 	}
 	v := &builderVisitor{builder: &builder{g, 1}, current: g.Start}
 	ast.Walk(v, x)

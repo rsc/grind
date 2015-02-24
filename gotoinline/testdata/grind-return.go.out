@@ -1,0 +1,27 @@
+package p
+
+func f() {
+	if b {
+		return
+	}
+	if b {
+		return
+	}
+	baz()
+}
+
+func f2() {
+	if b {
+		return
+	}
+	if b {
+		return
+	}
+	baz()
+
+	return
+}
+
+func baz()
+
+var b bool

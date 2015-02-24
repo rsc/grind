@@ -30,13 +30,23 @@ like C code.
 Dead Code Elimination
 
 Grind removes unreachable (dead) code. Code is considered
-unreachable if it is preceded by a terminating statement
-(see golang.org/ref/spec#Terminating_statements) and
-is not the target of a goto statement.
+unreachable if it is not the target of a goto statement and is
+preceded by a terminating statement
+(see golang.org/ref/spec#Terminating_statements),
+or a break or continue statement.
 
-Limitation: The analysis treats all block, if, for, switch, and
-select statements as non-terminating. In the future it may
-implement the more refined definitions given in the Go spec.
+Goto Inlining
+
+If the target of a goto is a block of code that is only reachable
+by following that goto statement, grind replaces the goto with
+a copy of the target code and deletes the original target code.
+
+If the target of a goto is an explicit or implicit return statement,
+replaces the goto with a copy of the return statement.
+
+Unused Label Removal
+
+Grind removes unused labels.
 
 Var Declaration Placement
 

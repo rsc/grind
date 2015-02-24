@@ -13,7 +13,6 @@ func f(x int) {
 		return
 	}
 	return
-
 Y:
 	f(3)
 }

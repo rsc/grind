@@ -1,0 +1,19 @@
+package p
+
+func f() {
+	if b {
+		f()
+		f()
+		f()
+		goto bar
+	}
+	goto bar
+
+bar:
+	baz()
+	return
+}
+
+func baz()
+
+var b bool

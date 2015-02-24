@@ -15,6 +15,7 @@ import (
 
 	_ "golang.org/x/tools/go/gcimporter"
 	"rsc.io/grind/deadcode"
+	"rsc.io/grind/gotoinline"
 	"rsc.io/grind/grinder"
 	"rsc.io/grind/vardecl"
 )
@@ -38,8 +39,12 @@ func main() {
 		usage()
 	}
 
-	ctxt.Grinders = append(ctxt.Grinders, deadcode.Grind)
-	ctxt.Grinders = append(ctxt.Grinders, vardecl.Grind)
+	ctxt.Grinders = []grinder.Func{
+		deadcode.Grind,
+		gotoinline.Grind,
+		vardecl.Grind,
+		DeleteUnusedLabels,
+	}
 
 	defer func() {
 		if ctxt.Errors {
