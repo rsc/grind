@@ -150,7 +150,10 @@ func (x editsByStart) Less(i, j int) bool {
 	if x[i].start != x[j].start {
 		return x[i].start < x[j].start
 	}
-	return x[i].end < x[j].end
+	if x[i].end != x[j].end {
+		return x[i].end < x[j].end
+	}
+	return x[i].text < x[j].text
 }
 
 func Diff(old, new string) []byte {

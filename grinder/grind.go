@@ -15,6 +15,7 @@ import (
 	"go/token"
 	"io/ioutil"
 	"path/filepath"
+	"strings"
 
 	_ "golang.org/x/tools/go/gcimporter"
 	"golang.org/x/tools/go/types"
@@ -185,6 +186,10 @@ Loop:
 func GrindFuncDecls(ctxt *Context, pkg *Package, fn func(ctxt *Context, pkg *Package, edit *EditBuffer, decl *ast.FuncDecl)) {
 	for i, filename := range pkg.Filenames {
 		file := pkg.Files[i]
+		if strings.Contains(pkg.Src(filename), "\n//line ") {
+			// Don't bother cleaning generated code.
+			continue
+		}
 		edit := NewEditBuffer(pkg, filename, file)
 		for _, decl := range file.Decls {
 			decl, ok := decl.(*ast.FuncDecl)
