@@ -462,11 +462,21 @@ func analyzeFunc(pkg *grinder.Package, body *ast.BlockStmt) []*Var {
 	return vars
 }
 
+func unlabel(x ast.Stmt) ast.Stmt {
+	for {
+		y, ok := x.(*ast.LabeledStmt)
+		if !ok {
+			return x
+		}
+		x = y.Stmt
+	}
+}
+
 func placeInit(start token.Pos, obj *ast.Object, decl *ast.DeclStmt, list []ast.Stmt) ast.Node {
 	declPos := -1
 	i := 0
 	for i < len(list) && list[i].End() < start {
-		if list[i] == decl {
+		if unlabel(list[i]) == decl {
 			declPos = i
 		}
 		i++
@@ -474,7 +484,7 @@ func placeInit(start token.Pos, obj *ast.Object, decl *ast.DeclStmt, list []ast.
 	if i >= len(list) {
 		panic(fmt.Sprintf("unexpected start position"))
 	}
-	switch x := list[i].(type) {
+	switch x := unlabel(list[i]).(type) {
 	case *ast.AssignStmt:
 		if canDeclare(x, obj) {
 			return x
@@ -483,6 +493,15 @@ func placeInit(start token.Pos, obj *ast.Object, decl *ast.DeclStmt, list []ast.
 
 	if declPos >= 0 && allSimple(list[declPos:i]) {
 		return decl
+	}
+
+	for j := i + 1; j < len(list); j++ {
+		if unlabel(list[j]) == decl {
+			if allSimple(list[i:j]) {
+				return decl
+			}
+			break
+		}
 	}
 
 	x := list[i]
@@ -501,7 +520,7 @@ func placeInit(start token.Pos, obj *ast.Object, decl *ast.DeclStmt, list []ast.
 
 func allSimple(list []ast.Stmt) bool {
 	for _, x := range list {
-		switch x.(type) {
+		switch unlabel(x).(type) {
 		case *ast.DeclStmt, *ast.AssignStmt, *ast.ExprStmt, *ast.EmptyStmt, *ast.IncDecStmt:
 			// ok
 		default:
