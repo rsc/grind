@@ -164,11 +164,13 @@ func (pkg *Package) LookupAtPos(fn *ast.FuncDecl, pos token.Pos, name string) ty
 		return true
 	})
 
-	for ; scope != nil; scope = scope.Parent() {
-		obj := scope.Lookup(name)
-		if obj != nil && obj.Pos() < pos {
+	pkgScope := pkg.Types.Scope()
+	for s := scope; s != nil; s = s.Parent() {
+		obj := s.Lookup(name)
+		if obj != nil && (s == pkgScope || obj.Pos() < pos) {
 			return obj
 		}
 	}
+
 	return nil
 }
