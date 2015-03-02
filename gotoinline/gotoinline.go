@@ -105,16 +105,9 @@ func findTargetBlock(pkg *grinder.Package, edit *grinder.EditBuffer, fn *ast.Fun
 		return
 	}
 
-	var list []ast.Stmt
-	switch x := blocks.Map[lstmt].Root.(type) {
-	default:
+	list := grinder.BlockList(blocks.Map[lstmt].Root)
+	if list == nil {
 		return
-	case *ast.BlockStmt:
-		list = x.List
-	case *ast.CommClause:
-		list = x.Body
-	case *ast.CaseClause:
-		list = x.Body
 	}
 
 	ulstmt := grinder.Unlabel(lstmt)

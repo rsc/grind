@@ -174,3 +174,18 @@ func (pkg *Package) LookupAtPos(fn *ast.FuncDecl, pos token.Pos, name string) ty
 
 	return nil
 }
+
+// BlockList returns the list of statements contained by the block x,
+// when x is an *ast.BlockStmt, *ast.CommClause, or *ast.CaseClause.
+// Otherwise BlockList returns nil.
+func BlockList(x ast.Node) []ast.Stmt {
+	switch x := x.(type) {
+	case *ast.BlockStmt:
+		return x.List
+	case *ast.CommClause:
+		return x.Body
+	case *ast.CaseClause:
+		return x.Body
+	}
+	return nil
+}

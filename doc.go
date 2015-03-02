@@ -48,6 +48,18 @@ Unused Label Removal
 
 Grind removes unused labels.
 
+Var Declaration Insertion
+
+Grind rewrites := declarations of complex zero types, such as:
+
+	x := (*T)(nil)
+	y := T{} // T a struct or array type
+
+to use plain var declarations, as in:
+
+	var x *T
+	var y T
+
 Var Declaration Placement
 
 Grind moves var declarations as close as possible to their uses.

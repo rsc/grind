@@ -1,0 +1,27 @@
+package p
+
+type T map[int]int
+type X [10]int
+type S struct {
+	X, Y, Z int
+}
+
+func f() {
+	var x *T
+	var y X
+	var z [12]int
+	var w struct{ X, Y int }
+	var a S
+	b := struct{ X, Y int }{1, 2}
+	var c map[string]int
+	var d chan int
+
+	_ = x
+	_ = y
+	_ = z
+	_ = w
+	_ = a
+	_ = b
+	_ = c
+	_ = d
+}

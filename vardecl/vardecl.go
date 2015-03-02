@@ -62,6 +62,10 @@ func grindFunc(ctxt *grinder.Context, pkg *grinder.Package, edit *grinder.EditBu
 			edit.DeleteLine(v.Decl.Pos(), v.Decl.End())
 		}
 	}
+
+	if edit.NumEdits() == 0 {
+		initToDecl(ctxt, pkg, edit, fn)
+	}
 }
 
 func hasType(pkg *grinder.Package, fn *ast.FuncDecl, x, v ast.Expr) bool {
@@ -310,6 +314,9 @@ func analyzeFunc(pkg *grinder.Package, edit *grinder.EditBuffer, body *ast.Block
 						// Cannot declare between forward goto (possibly in nested block)
 						// and target label in same block; Go disallows jumping over declaration.
 						if g.Pos() < d.Start && d.Start <= label.Pos() && blocks.Map[label] == d.Block {
+							if false {
+								fmt.Printf("%s:%d: goto %s blocks declaration of %s here\n", pkg.FileSet.Position(d.Start).Filename, pkg.FileSet.Position(d.Start).Line, labelname, obj.Name)
+							}
 							d.Start = g.Pos()
 							changed = true
 						}
@@ -1000,4 +1007,69 @@ func (u *unionFind) Sets() [][]interface{} {
 		}
 	}
 	return out
+}
+
+func initToDecl(ctxt *grinder.Context, pkg *grinder.Package, edit *grinder.EditBuffer, fn *ast.FuncDecl) {
+	// Rewrite x := T{} (for struct or array type T) and x := (*T)(nil) to var x T.
+	ast.Inspect(fn.Body, func(x ast.Node) bool {
+		list := grinder.BlockList(x)
+		for _, stmt := range list {
+			as, ok := stmt.(*ast.AssignStmt)
+			if !ok || len(as.Lhs) > 1 || as.Tok != token.DEFINE {
+				continue
+			}
+			var typ string
+			if t, ok := isNilPtr(pkg, edit, as.Rhs[0]); ok {
+				typ = t
+			} else if t, ok := isStructOrArrayLiteral(pkg, edit, as.Rhs[0]); ok {
+				typ = t
+			}
+			if typ != "" {
+				edit.Replace(stmt.Pos(), stmt.End(), "var "+as.Lhs[0].(*ast.Ident).Name+" "+typ)
+			}
+		}
+		return true
+	})
+}
+
+func isNilPtr(pkg *grinder.Package, edit *grinder.EditBuffer, x ast.Expr) (typ string, ok bool) {
+	conv, ok := x.(*ast.CallExpr)
+	if !ok || len(conv.Args) != 1 {
+		return "", false
+	}
+	id, ok := unparen(conv.Args[0]).(*ast.Ident)
+	if !ok || id.Name != "nil" {
+		return "", false
+	}
+	if obj := pkg.Info.Uses[id]; obj == nil || obj.Pkg() != nil {
+		return "", false
+	}
+	fn := unparen(conv.Fun)
+	tv, ok := pkg.Info.Types[fn]
+	if !ok || !tv.IsType() {
+		return "", false
+	}
+	return edit.TextAt(fn.Pos(), fn.End()), true
+}
+
+func isStructOrArrayLiteral(pkg *grinder.Package, edit *grinder.EditBuffer, x ast.Expr) (typ string, ok bool) {
+	lit, ok := x.(*ast.CompositeLit)
+	if !ok || len(lit.Elts) > 0 {
+		return "", false
+	}
+	tv, ok := pkg.Info.Types[x]
+	if !ok {
+		return "", false
+	}
+	t := tv.Type
+	if name, ok := t.(*types.Named); ok {
+		t = name.Underlying()
+	}
+	switch t.(type) {
+	default:
+		return "", false
+	case *types.Struct, *types.Array:
+		// ok
+	}
+	return edit.TextAt(lit.Type.Pos(), lit.Type.End()), true
 }
