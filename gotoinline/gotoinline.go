@@ -23,6 +23,7 @@ func Grind(ctxt *grinder.Context, pkg *grinder.Package) {
 }
 
 type targetBlock struct {
+	comment    token.Pos
 	start      token.Pos
 	endLabel   token.Pos
 	end        token.Pos
@@ -59,7 +60,7 @@ func grindFunc(ctxt *grinder.Context, pkg *grinder.Package, edit *grinder.EditBu
 		if ok && (len(gotos) == 1 && target.dead || target.short) {
 			numReplaced := 0
 			for _, g := range gotos {
-				code := target.code
+				code := edit.TextAt(target.comment, target.start) + target.code
 				if !objsMatch(pkg, fn, g.Pos(), target.objs, target.start, target.end) {
 					if debug {
 						println("OBJS DO NOT MATCH")
@@ -80,7 +81,7 @@ func grindFunc(ctxt *grinder.Context, pkg *grinder.Package, edit *grinder.EditBu
 			}
 			if numReplaced == len(gotos) {
 				if len(gotos) == 1 && target.dead {
-					edit.Delete(target.start, target.end)
+					edit.Delete(target.comment, target.end)
 				} else {
 					edit.DeleteLine(target.start, target.endLabel)
 				}
@@ -164,6 +165,7 @@ func findTargetBlock(pkg *grinder.Package, edit *grinder.EditBuffer, fn *ast.Fun
 			}
 			target.dead = i > 0 && grinder.IsTerminatingStmt(blocks, list[i-1])
 			target.start = lstmt.Pos()
+			target.comment = edit.BeforeComments(target.start)
 			target.endLabel = lstmt.Colon + 1
 			target.end = edit.End(list[end-1])
 			target.code = strings.TrimSpace(edit.TextAt(lstmt.Colon+1, target.end))

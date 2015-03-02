@@ -73,6 +73,38 @@ func (b *EditBuffer) End(x ast.Node) token.Pos {
 	return x.End()
 }
 
+// BeforeComments rewinds start past any blank lines or line comments
+// and return the result. It does not rewind past leading blank lines:
+// the returned position, if changed, is always the start of a non-blank line.
+func (b *EditBuffer) BeforeComments(start token.Pos) token.Pos {
+	i := b.tx(start)
+	// Back up to newline.
+	for i > 0 && (b.text[i-1] == ' ' || b.text[i-1] == '\t') {
+		i--
+	}
+	if i > 0 && b.text[i-1] != '\n' {
+		return start
+	}
+
+	// Go backward by lines.
+	lastNonBlank := i
+	for i > 0 {
+		j := i - 1
+		for j > 0 && b.text[j-1] != '\n' {
+			j--
+		}
+		trim := strings.TrimSpace(b.text[j:i])
+		if len(trim) > 0 && !strings.HasPrefix(trim, "//") {
+			break
+		}
+		if len(trim) > 0 {
+			lastNonBlank = j
+		}
+		i = j
+	}
+	return start - token.Pos(b.tx(start)-lastNonBlank)
+}
+
 func (b *EditBuffer) TextAt(start, end token.Pos) string {
 	return string(b.text[b.tx(start):b.tx(end)])
 }

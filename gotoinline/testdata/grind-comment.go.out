@@ -1,0 +1,14 @@
+package p
+
+func f() {
+	if cond {
+		// comment
+
+		// more comment
+		f()
+		return
+	}
+	return
+}
+
+var cond bool
