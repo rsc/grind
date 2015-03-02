@@ -1,0 +1,15 @@
+package p
+
+var cond bool
+
+func f() {
+	if cond {
+		f()
+		goto ret
+	}
+	goto ret
+
+ret:
+	f()
+	return
+}

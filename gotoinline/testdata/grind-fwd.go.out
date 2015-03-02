@@ -1,0 +1,13 @@
+package p
+
+var cond bool
+
+func f() {
+	if cond {
+		println(x)
+		return
+	}
+	return
+}
+
+var x int

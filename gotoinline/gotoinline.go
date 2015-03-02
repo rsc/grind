@@ -5,6 +5,7 @@
 package gotoinline
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"strings"
@@ -14,6 +15,8 @@ import (
 	"rsc.io/grind/block"
 	"rsc.io/grind/grinder"
 )
+
+var debug = false
 
 func Grind(ctxt *grinder.Context, pkg *grinder.Package) {
 	grinder.GrindFuncDecls(ctxt, pkg, grindFunc)
@@ -32,8 +35,15 @@ type targetBlock struct {
 }
 
 func grindFunc(ctxt *grinder.Context, pkg *grinder.Package, edit *grinder.EditBuffer, fn *ast.FuncDecl) {
+	if fn.Name.Name == "evconst" {
+		old := debug
+		debug = true
+		defer func() { debug = old }()
+	}
+
 	if pkg.TypesError != nil {
 		// Without scoping information, we can't be sure code moves are okay.
+		fmt.Printf("%s: cannot inline gotos without type information\n", fn.Name)
 		return
 	}
 
@@ -43,11 +53,17 @@ func grindFunc(ctxt *grinder.Context, pkg *grinder.Package, edit *grinder.EditBu
 	blocks := block.Build(pkg.FileSet, fn.Body)
 	for labelname, gotos := range blocks.Goto {
 		target, ok := findTargetBlock(pkg, edit, fn, blocks, labelname)
+		if debug {
+			println("TARGET", ok, labelname, len(gotos), target.dead, target.short)
+		}
 		if ok && (len(gotos) == 1 && target.dead || target.short) {
 			numReplaced := 0
 			for _, g := range gotos {
 				code := target.code
-				if !objsMatch(pkg, fn, g.Pos(), target.objs) {
+				if !objsMatch(pkg, fn, g.Pos(), target.objs, target.start, target.end) {
+					if debug {
+						println("OBJS DO NOT MATCH")
+					}
 					// Cannot inline code here; needed identifiers have different meanings.
 					continue
 				}
@@ -80,6 +96,9 @@ func grindFunc(ctxt *grinder.Context, pkg *grinder.Package, edit *grinder.EditBu
 }
 
 func findTargetBlock(pkg *grinder.Package, edit *grinder.EditBuffer, fn *ast.FuncDecl, blocks *block.Graph, labelname string) (target targetBlock, ok bool) {
+	if debug {
+		println("FINDTARGET", labelname)
+	}
 	lstmt := blocks.Label[labelname]
 	if lstmt == nil {
 		return
@@ -101,9 +120,15 @@ func findTargetBlock(pkg *grinder.Package, edit *grinder.EditBuffer, fn *ast.Fun
 	for i := 0; i < len(list); i++ {
 		if grinder.Unlabel(list[i]) == ulstmt {
 			// Found statement. Find extent of block.
+			if debug {
+				println("FOUND")
+			}
 			end := i
 			for ; ; end++ {
 				if end >= len(list) {
+					if debug {
+						println("EARLY END")
+					}
 					// List ended without terminating statement.
 					// Unless this is the top-most block, we can't hoist this code.
 					if blocks.Map[lstmt].Root != fn.Body {
@@ -114,16 +139,28 @@ func findTargetBlock(pkg *grinder.Package, edit *grinder.EditBuffer, fn *ast.Fun
 					break
 				}
 				if end > i && grinder.IsGotoTarget(blocks, list[end]) {
+					if debug {
+						println("FOUND TARGET")
+					}
 					target.needGoto = list[end].(*ast.LabeledStmt).Label.Name
 					break
 				}
 				if grinder.IsTerminatingStmt(blocks, list[end]) {
+					if debug {
+						println("TERMINATING")
+					}
 					end++
 					break
 				}
 			}
 			if end <= i {
+				if debug {
+					println("NOTHING")
+				}
 				return
+			}
+			if debug {
+				println("OK")
 			}
 			target.dead = i > 0 && grinder.IsTerminatingStmt(blocks, list[i-1])
 			target.start = lstmt.Pos()
@@ -194,9 +231,16 @@ func gatherObjs(pkg *grinder.Package, fn *ast.FuncDecl, start token.Pos, list []
 	return objs
 }
 
-func objsMatch(pkg *grinder.Package, fn *ast.FuncDecl, pos token.Pos, objs []types.Object) bool {
+func objsMatch(pkg *grinder.Package, fn *ast.FuncDecl, pos token.Pos, objs []types.Object, start, end token.Pos) bool {
 	for _, obj := range objs {
+		if start < obj.Pos() && obj.Pos() < end {
+			// declaration is in code being moved
+			return true
+		}
 		if pkg.LookupAtPos(fn, pos, obj.Name()) != obj {
+			if debug {
+				println("OBJ MISMATCH", obj.Name(), pkg.LookupAtPos(fn, pos, obj.Name()), obj)
+			}
 			return false
 		}
 	}
