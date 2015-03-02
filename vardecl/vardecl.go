@@ -392,6 +392,10 @@ func analyzeFunc(pkg *grinder.Package, edit *grinder.EditBuffer, body *ast.Block
 				changed = true
 			}
 
+			if changed {
+				continue
+			}
+
 			// Find place to put declaration.
 			// We established canDeclare(d.Block, obj) above.
 			for _, d := range defs {
@@ -862,12 +866,16 @@ func (m *identMatcher) Transfer(x ast.Node) {
 		m.out[x] = defSet{m.in[x].list, true}
 		return
 
-	case *ast.AssignStmt, *ast.IncDecStmt:
+	case *ast.AssignStmt:
 		if m.in[x].addrTaken {
 			m.out[x] = defSet{mergef(m.in[x].list, []ast.Node{x}), true}
 		} else {
 			m.out[x] = defSet{[]ast.Node{x}, false}
 		}
+		return
+
+	case *ast.IncDecStmt:
+		m.out[x] = defSet{mergef(m.in[x].list, []ast.Node{x}), m.in[x].addrTaken}
 		return
 	}
 	m.out[x] = m.in[x]
