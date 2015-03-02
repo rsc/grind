@@ -224,13 +224,18 @@ func analyzeFunc(pkg *grinder.Package, edit *grinder.EditBuffer, body *ast.Block
 					continue
 				}
 			}
-			if len(m.out[x].list) > 0 {
-				// Only need to use list[0] because all x's possible defs
-				// have been merged in the previous passs.
-				d := nodedef[t.Find(m.out[x].list[0]).(ast.Node)]
+			// Must use all entries in list.
+			// Although most defs have been merged in previous passes,
+			// the implicit zero definition of a var decl has not been.
+			for _, def := range m.out[x].list {
+				d := nodedef[t.Find(def).(ast.Node)]
 				bx := blocks.Map[x]
 				if debug {
-					fmt.Printf("ID:X %s d=%p %p b=%p %d\n", m.nodeIn(x), d, d.Block, bx, bx.Depth)
+					ddepth := -1
+					if d.Block != nil {
+						ddepth = d.Block.Depth
+					}
+					fmt.Printf("ID:X %s | d=%p %p b=%p bxdepth=%d ddepth=%d\n", m.nodeIn(x), d, d.Block, bx, bx.Depth, ddepth)
 				}
 				if d.Block == nil {
 					d.Block = blocks.Map[x]
@@ -254,6 +259,9 @@ func analyzeFunc(pkg *grinder.Package, edit *grinder.EditBuffer, body *ast.Block
 				}
 				if end := x.End(); end > d.End {
 					d.End = end
+				}
+				if debug {
+					fmt.Printf("ID:X -> %s:%d,%d (%d,%d) ddepth=%d\n", pkg.FileSet.Position(d.Start).Filename, pkg.FileSet.Position(d.Start).Line, pkg.FileSet.Position(d.End).Line, d.Start, d.End, d.Block.Depth)
 				}
 			}
 		}
@@ -356,78 +364,88 @@ func analyzeFunc(pkg *grinder.Package, edit *grinder.EditBuffer, body *ast.Block
 				}
 			}
 
+			// There can only be one definition (with a given name) per block.
+			// Merge as needed.
+			blockdef := make(map[*block.Block]*Def)
+			for di, d := range defs {
+				if d == nil {
+					continue
+				}
+				dd := blockdef[d.Block]
+				if dd == nil {
+					blockdef[d.Block] = d
+					continue
+				}
+				//fmt.Printf("merge defs %p %p\n", d, dd)
+				if d.Start < dd.Start {
+					dd.Start = d.Start
+				}
+				if d.End > dd.End {
+					dd.End = d.End
+				}
+				for y, yDef := range idToDef {
+					if yDef == d {
+						idToDef[y] = dd
+					}
+				}
+				defs[di] = nil
+				changed = true
+			}
+
+			// Find place to put declaration.
+			// We established canDeclare(d.Block, obj) above.
+			for _, d := range defs {
+				if d == nil || d.Block == nil {
+					continue
+				}
+				switch x := d.Block.Root.(type) {
+				default:
+					panic(fmt.Sprintf("unexpected declaration block root %T", d.Block.Root))
+
+				case *ast.BlockStmt:
+					d.Init = placeInit(edit, d.Start, obj, vardecl[obj], x.List)
+
+				case *ast.CaseClause:
+					d.Init = placeInit(edit, d.Start, obj, vardecl[obj], x.Body)
+
+				case *ast.CommClause:
+					d.Init = placeInit(edit, d.Start, obj, vardecl[obj], x.Body)
+
+				case *ast.IfStmt:
+					if x.Init == nil {
+						panic("if without init")
+					}
+					d.Init = x.Init
+
+				case *ast.ForStmt:
+					if x.Init == nil {
+						panic("for without init")
+					}
+					d.Init = x.Init
+
+				case *ast.RangeStmt:
+					d.Init = x
+
+				case *ast.SwitchStmt:
+					if x.Init == nil {
+						panic("switch without init")
+					}
+					d.Init = x
+
+				case *ast.TypeSwitchStmt:
+					if x.Init == nil {
+						panic("type switch without init")
+					}
+					d.Init = x
+				}
+				if d.Init != nil && d.Init.Pos() < d.Start {
+					d.Start = d.Init.Pos()
+					changed = true
+				}
+			}
+
 			if !changed {
 				break
-			}
-		}
-
-		// There can only be one definition (with a given name) per block.
-		// Merge as needed.
-		blockdef := make(map[*block.Block]*Def)
-		for di, d := range defs {
-			if d == nil {
-				continue
-			}
-			dd := blockdef[d.Block]
-			if dd == nil {
-				blockdef[d.Block] = d
-				continue
-			}
-			//fmt.Printf("merge defs %p %p\n", d, dd)
-			if d.Start < dd.Start {
-				dd.Start = d.Start
-			}
-			if d.End > dd.End {
-				dd.End = d.End
-			}
-			defs[di] = nil
-		}
-
-		// Find place to put declaration.
-		// We established canDeclare(d.Block, obj) above.
-		for _, d := range defs {
-			if d == nil || d.Block == nil {
-				continue
-			}
-			switch x := d.Block.Root.(type) {
-			default:
-				panic(fmt.Sprintf("unexpected declaration block root %T", d.Block.Root))
-
-			case *ast.BlockStmt:
-				d.Init = placeInit(edit, d.Start, obj, vardecl[obj], x.List)
-
-			case *ast.CaseClause:
-				d.Init = placeInit(edit, d.Start, obj, vardecl[obj], x.Body)
-
-			case *ast.CommClause:
-				d.Init = placeInit(edit, d.Start, obj, vardecl[obj], x.Body)
-
-			case *ast.IfStmt:
-				if x.Init == nil {
-					panic("if without init")
-				}
-				d.Init = x.Init
-
-			case *ast.ForStmt:
-				if x.Init == nil {
-					panic("for without init")
-				}
-				d.Init = x.Init
-
-			case *ast.RangeStmt:
-				d.Init = x
-
-			case *ast.SwitchStmt:
-				if x.Init == nil {
-					panic("switch without init")
-				}
-				d.Init = x
-
-			case *ast.TypeSwitchStmt:
-				if x.Init == nil {
-					panic("type switch without init")
-				}
-				d.Init = x
 			}
 		}
 
@@ -439,11 +457,11 @@ func analyzeFunc(pkg *grinder.Package, edit *grinder.EditBuffer, body *ast.Block
 			}
 			if debug {
 				fset := pkg.FileSet
-				fmt.Printf("\tdepth %d: %s:%d,%d\n", d.Block.Depth, fset.Position(d.Start).Filename, fset.Position(d.Start).Line, fset.Position(d.End).Line)
+				fmt.Printf("\tdepth %d: %s:%d,%d (%d,%d)\n", d.Block.Depth, fset.Position(d.Start).Filename, fset.Position(d.Start).Line, fset.Position(d.End).Line, d.Start, d.End)
 				for _, x := range m.list {
 					if len(m.out[x].list) > 0 {
 						if d.Block == nodedef[t.Find(m.out[x].list[0]).(ast.Node)].Block {
-							fmt.Printf("\t%s:%d %T\n", fset.Position(x.Pos()).Filename, fset.Position(x.Pos()).Line, x)
+							fmt.Printf("\t%s:%d %T (%d)\n", fset.Position(x.Pos()).Filename, fset.Position(x.Pos()).Line, x, x.Pos())
 						}
 					}
 				}
