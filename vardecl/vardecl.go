@@ -48,7 +48,7 @@ func grindFunc(ctxt *grinder.Context, pkg *grinder.Package, edit *grinder.EditBu
 				edit.CopyLine(v.Decl.Pos(), v.Decl.End(), x.Semicolon)
 			case *ast.AssignStmt:
 				edit.Insert(x.TokPos, ":")
-				if !hasType(pkg, fn, x.Rhs[0], x.Lhs[0]) {
+				if !hasType(pkg, fn, edit, x.Rhs[0], x.Lhs[0]) {
 					typ := edit.TextAt(spec.Type.Pos(), spec.Type.End())
 					if strings.Contains(typ, " ") || typ == "interface{}" || typ == "struct{}" || strings.HasPrefix(typ, "*") {
 						typ = "(" + typ + ")"
@@ -68,7 +68,7 @@ func grindFunc(ctxt *grinder.Context, pkg *grinder.Package, edit *grinder.EditBu
 	}
 }
 
-func hasType(pkg *grinder.Package, fn *ast.FuncDecl, x, v ast.Expr) bool {
+func hasType(pkg *grinder.Package, fn *ast.FuncDecl, edit *grinder.EditBuffer, x, v ast.Expr) bool {
 	// Does x (by itself) default to v's type?
 	// Find the scope in which x appears.
 	xScope := pkg.Info.Scopes[fn.Type]
@@ -85,7 +85,8 @@ func hasType(pkg *grinder.Package, fn *ast.FuncDecl, x, v ast.Expr) bool {
 		}
 		return true
 	})
-	xt, err := types.EvalNode(pkg.FileSet, x, pkg.Types, xScope)
+	xs := edit.TextAt(x.Pos(), x.End())
+	xt, err := types.Eval(pkg.FileSet, pkg.Types, xScope.Pos(), xs)
 	if err != nil {
 		return false
 	}
