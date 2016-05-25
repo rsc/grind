@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	_ "golang.org/x/tools/go/gcimporter"
+	_ "golang.org/x/tools/go/gcimporter15"
 	"golang.org/x/tools/go/types"
 )
 
