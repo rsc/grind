@@ -11,7 +11,7 @@ import (
 	"go/token"
 	"strings"
 
-	"golang.org/x/tools/go/types"
+	"go/types"
 
 	"rsc.io/grind/block"
 	"rsc.io/grind/flow"
