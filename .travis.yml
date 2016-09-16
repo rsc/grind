@@ -1,0 +1,16 @@
+language: go
+go_import_path: rsc.io/grind
+go:
+  - 1.4.3
+  - 1.5.3
+  - 1.6.2
+  - 1.7.1
+  - tip
+
+sudo: false
+
+install:
+  - go get -t -v ./...
+
+script:
+  - go test -v ./...
