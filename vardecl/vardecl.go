@@ -88,12 +88,14 @@ func hasType(pkg *grinder.Package, fn *ast.FuncDecl, x, v ast.Expr) bool {
 
 	var buf bytes.Buffer
 	if err := printer.Fprint(&buf, pkg.FileSet, x); err != nil {
-		panic(err)
+		return false
 	}
+
 	xt, err := types.Eval(pkg.FileSet, pkg.Types, x.Pos(), buf.String())
 	if err != nil {
 		return false
 	}
+
 	vt := pkg.Info.Types[v]
 	if types.Identical(xt.Type, vt.Type) {
 		return true
