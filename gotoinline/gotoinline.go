@@ -8,9 +8,8 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"go/types"
 	"strings"
-
-	"golang.org/x/tools/go/types"
 
 	"rsc.io/grind/block"
 	"rsc.io/grind/grinder"
