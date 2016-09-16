@@ -8,10 +8,10 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
+	"go/printer"
 	"go/token"
+	"go/types"
 	"strings"
-
-	"golang.org/x/tools/go/types"
 
 	"rsc.io/grind/block"
 	"rsc.io/grind/flow"
@@ -85,7 +85,12 @@ func hasType(pkg *grinder.Package, fn *ast.FuncDecl, x, v ast.Expr) bool {
 		}
 		return true
 	})
-	xt, err := types.EvalNode(pkg.FileSet, x, pkg.Types, xScope)
+
+	var buf bytes.Buffer
+	if err := printer.Fprint(&buf, pkg.FileSet, x); err != nil {
+		panic(err)
+	}
+	xt, err := types.Eval(pkg.FileSet, pkg.Types, x.Pos(), buf.String())
 	if err != nil {
 		return false
 	}

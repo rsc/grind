@@ -13,7 +13,6 @@ import (
 	"os/exec"
 	"strings"
 
-	_ "golang.org/x/tools/go/gcimporter"
 	"rsc.io/grind/deadcode"
 	"rsc.io/grind/gotoinline"
 	"rsc.io/grind/grinder"

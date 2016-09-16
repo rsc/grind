@@ -11,14 +11,13 @@ import (
 	"go/ast"
 	"go/build"
 	"go/format"
+	"go/importer"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
-
-	_ "golang.org/x/tools/go/gcimporter"
-	"golang.org/x/tools/go/types"
 )
 
 type Package struct {
@@ -136,7 +135,6 @@ func (ctxt *Context) GrindPackage(path string) *Package {
 func (ctxt *Context) grind(pkg *Package) {
 Loop:
 	for loop := 0; ; loop++ {
-		println(loop)
 		pkg.FileSet = token.NewFileSet()
 
 		pkg.Files = nil
@@ -154,6 +152,7 @@ Loop:
 		}
 
 		conf := new(types.Config)
+		conf.Importer = importer.For("gc", nil)
 		// conf.DisableUnusedImportCheck = true
 		pkg.Info = types.Info{}
 		pkg.Info.Types = make(map[ast.Expr]types.TypeAndValue)
